@@ -61,6 +61,30 @@ LLAMA_CPP_PATH_CLEAN="${LLAMA_CPP_PATH%/}"
 mkdir -p ./llama.cpp
 cp -r "$LLAMA_CPP_PATH_CLEAN"/. ./llama.cpp/
 
+# Prepare llama-swap for build
+echo "Preparing llama-swap for build..."
+if [ -n "$LLAMA_SWAP_PATH" ]; then
+    # Use specified llama-swap path
+    if [ ! -d "$LLAMA_SWAP_PATH" ]; then
+        echo "Error: llama-swap directory not found: $LLAMA_SWAP_PATH"
+        exit 1
+    fi
+    echo "Using llama-swap from: $LLAMA_SWAP_PATH"
+    rm -rf ./llama-swap
+    LLAMA_SWAP_PATH_CLEAN="${LLAMA_SWAP_PATH%/}"
+    mkdir -p ./llama-swap
+    cp -r "$LLAMA_SWAP_PATH_CLEAN"/. ./llama-swap/
+else
+    # Clone llama-swap if not present in build context
+    if [ ! -d "./llama-swap" ]; then
+        echo "Cloning llama-swap repository..."
+        git clone https://github.com/mostlygeek/llama-swap.git ./llama-swap
+    else
+        echo "llama-swap directory exists, updating..."
+        cd ./llama-swap && git pull && cd ..
+    fi
+fi
+
 # Build and start services
 echo "Building and starting services..."
 docker compose build

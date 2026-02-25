@@ -4,103 +4,162 @@ services:
     container_name: open-webui
     restart: unless-stopped
     ports:
-      - "3000:8080"
+    - "3000:8080"
     volumes:
-      - open-webui:/app/backend/data
-      - open-webui-ollama:/root/.ollama
+    - open-webui:/app/backend/data
+    - open-webui-ollama:/root/.ollama
     environment:
-      - USE_OLLAMA_DOCKER=true
-      - USE_CUDA_DOCKER=true
-      - OLLAMA_BASE_URL=/ollama
-      - DOCLING_DO_PICTURE_DESCRIPTION=true
+    - USE_OLLAMA_DOCKER=true
+    - USE_CUDA_DOCKER=true
+    - OLLAMA_BASE_URL=/ollama
+    - DOCLING_DO_PICTURE_DESCRIPTION=true
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+    - "host.docker.internal:host-gateway"
     networks:
-      - spark-network
+    - spark-network
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+          - driver: nvidia
+            count: all
+            capabilities: [gpu]
     depends_on:
-      - docling
-      - llamacpp
+    - docling
+    - llamacpp-llama
+    #- llama-swap
 
   docling:
     image: ghcr.io/docling-project/docling-serve-cu130:main
     container_name: docling
     restart: unless-stopped
     ports:
-      - "5001:5001"
+    - "5001:5001"
     volumes:
-      - docling-models:/root/.cache/docling
-      - docling-easyocr:/root/.EasyOCR
+    - docling-models:/root/.cache/docling
+    - docling-easyocr:/root/.EasyOCR
     environment:
-      - DOCLING_SERVE_ENABLE_UI=true
-      - DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true
-      - DOCLING_SERVE_MAX_SYNC_WAIT=3600
-      - DOCLING_SERVE_ENG_LOC_NUM_WORKERS=2
-      - OMP_NUM_THREADS=4
-      - MKL_NUM_THREADS=4
-      - UVICORN_WORKERS=1
-      - CUDA_VISIBLE_DEVICES=0
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+    - DOCLING_SERVE_ENABLE_UI=true
+    - DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true
+    - DOCLING_SERVE_MAX_SYNC_WAIT=3600
+    - DOCLING_SERVE_ENG_LOC_NUM_WORKERS=2
+    - OMP_NUM_THREADS=4
+    - MKL_NUM_THREADS=4
+    - UVICORN_WORKERS=1
+    - CUDA_VISIBLE_DEVICES=0
     networks:
-      - spark-network
+    - spark-network
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              device_ids: ['0']
-              capabilities: [gpu]
+          - driver: nvidia
+            device_ids: ['0']
+            capabilities: [gpu]
+    depends_on:
+    - llamacpp-vision
 
-  llamacpp:
-    build:
-      context: .
-      dockerfile: Dockerfile.llamacpp
-    container_name: llamacpp
+  llamacpp-vision:
+    image: cslev/llamacpp-cuda-arm64:latest
+    container_name: llamacpp-vision
     restart: unless-stopped
-    ports:
-      - "8001:8001"
+    # No port mapping needed - accessed internally via llama-swap
     volumes:
-      - ${MODELS_DIR:-./models}:/models:ro
-      - ./logs:/logs
+    - ${MODELS_DIR:-./models}:/models:ro
+    - ./logs:/logs
     environment:
-      - LLAMA_SERVER_PATH=${LLAMA_SERVER_PATH:-/llama-server}
-      - MODEL_PATH=${MODEL_PATH:-/models/granite-vision-3.3-2b/granite-vision-3.3-2b-Q8_0.gguf}
-      - MM_PROJ_PATH=${MM_PROJ_PATH:-/models/granite-vision-3.3-2b/mmproj-model-f16.gguf}
-      - CUDA_VISIBLE_DEVICES=0
+    - MODEL_PATH=${VISION_MODEL_PATH:-/models/granite-vision-3.3-2b/granite-vision-3.3-2b-Q8_0.gguf}
+    - MM_PROJ_PATH=${VISION_MM_PROJ_PATH:-/models/granite-vision-3.3-2b/mmproj-model-f16.gguf}
+    - CUDA_VISIBLE_DEVICES=0
+    command: >
+      --host 0.0.0.0
+      --port 8001
+      --ctx-size 32768
+      --threads 8
+      --n-gpu-layers 99
+      --flash-attn on
+      --model ${VISION_MODEL_PATH:-/models/granite-vision-3.3-2b/granite-vision-3.3-2b-Q8_0.gguf}
+      --mmproj ${VISION_MM_PROJ_PATH:-/models/granite-vision-3.3-2b/mmproj-model-f16.gguf}
     networks:
-      - spark-network
+    - spark-network
     deploy:
       resources:
         reservations:
           devices:
-            - driver: nvidia
-              device_ids: ['0']
-              capabilities: [gpu]
+          - driver: nvidia
+            device_ids: ['0']
+            capabilities: [gpu]
+
+  llamacpp-llama:
+    image: cslev/llamacpp-cuda-arm64:latest
+    container_name: llamacpp-llama
+    restart: unless-stopped
+    # No port mapping needed - accessed internally via llama-swap
+    volumes:
+    - ${MODELS_DIR:-./models}:/models:ro
+    - ./logs:/logs
+    environment:
+    - MODEL_PATH=${LLAMA_MODEL_PATH:-/models/llama-3.1-8b-instruct/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf}
+    - CUDA_VISIBLE_DEVICES=0
+    command: >
+      --host 0.0.0.0
+      --port 8001
+      --ctx-size 16384
+      --threads 8
+      --flash-attn on
+      --n-gpu-layers 99
+      --model ${LLAMA_MODEL_PATH:-/models/llama-3.1-8b-instruct/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf}
+    networks:
+    - spark-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+          - driver: nvidia
+            device_ids: ['0']
+            capabilities: [gpu]
+
+  # optionally enable llama-swap for automatic model switching
+  # llama-swap:
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile.llama-swap
+    # container_name: llama-swap
+    # restart: unless-stopped
+    # ports:
+    # - "8002:8080"
+    # volumes:
+    # - ./config/llama-swap.yaml:/app/config.yaml:ro
+    # networks:
+    # - spark-network
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #       - driver: nvidia
+    #         count: all
+    #         capabilities: [gpu]
+    # depends_on:
+    # - llamacpp-vision
+    # - llamacpp-llama
 
   nginx:
     image: nginx:alpine
     container_name: nginx-proxy
     ports:
-      - "80:80"
+    - "80:80"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./nginx/logs:/var/log/nginx
+    - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    - ./nginx/logs:/var/log/nginx
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+    - "host.docker.internal:host-gateway"
     depends_on:
-      - open-webui
-      - docling
-      - llamacpp
+    - open-webui
+    - docling
+    - llama-swap
     restart: unless-stopped
     networks:
-      - spark-network
+    - spark-network
 
 networks:
   spark-network:

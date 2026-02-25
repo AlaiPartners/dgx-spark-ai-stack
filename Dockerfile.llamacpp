@@ -4,6 +4,9 @@ FROM nvidia/cuda:13.0.2-devel-ubuntu24.04
 
 # Fix LD_LIBRARY_PATH for GB10 compatibility
 ENV LD_LIBRARY_PATH=/usr/local/cuda-13/compat
+# Prevent CUDA from trying to access display
+ENV DISPLAY=""
+ENV CUDA_VISIBLE_DEVICES=0
 
 WORKDIR /app
 
@@ -43,5 +46,5 @@ RUN cd /app/llama.cpp && \
 # Create logs directory
 RUN mkdir -p /logs
 
-# Default command
-CMD ["/bin/bash", "-c", "/llama-server --host 0.0.0.0 --port 8001 --ctx-size 16384 --threads 8 --n-gpu-layers 99 --model ${MODEL_PATH} --mmproj ${MM_PROJ_PATH}"]
+# Default command (handles both vision and text-only models)
+CMD ["/bin/bash", "-c", "if [ -n \"${MM_PROJ_PATH}\" ]; then /llama-server --host 0.0.0.0 --port 8001 --ctx-size 16384 --threads 8 --n-gpu-layers 99 --model ${MODEL_PATH} --mmproj ${MM_PROJ_PATH}; else /llama-server --host 0.0.0.0 --port 8001 --ctx-size 16384 --threads 8 --n-gpu-layers 99 --model ${MODEL_PATH}; fi"]

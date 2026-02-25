@@ -1,0 +1,24 @@
+# llama-swap configuration
+# This configures automatic model switching between llama.cpp servers
+
+port: 8080
+healthCheckTimeout: 120
+
+models:
+  # Vision model (granite-vision-3.3-2b)
+  # Using proxy-only mode (servers are already running via Docker Compose)
+  # The cmd just waits - server is already running, we just need to satisfy llama-swap
+  granite-2b-vision:
+    proxy: http://llamacpp-vision:8001
+    checkEndpoint: /health
+    # Dummy cmd that waits forever - server is already running via Docker
+    cmd: "sleep infinity"
+
+  # Text model (llama-3.1-8b-instruct)
+  # Using proxy-only mode (servers are already running via Docker Compose)
+  # The cmd just waits - server is already running, we just need to satisfy llama-swap
+  llama-3.1-8b-instruct:
+    proxy: http://llamacpp-llama:8001
+    checkEndpoint: /health
+    # Dummy cmd that waits forever - server is already running via Docker
+    cmd: "sleep infinity"
