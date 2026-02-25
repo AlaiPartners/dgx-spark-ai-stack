@@ -16,7 +16,7 @@
 └───────┘ └──────┘ └───────┘ └───────┘
 ```
 
-### Pros ✅
+### Pros
 - **Isolation**: Each model runs independently
 - **Resource Control**: Per-model limits (memory, GPU, CPU)
 - **Independent Scaling**: Scale models separately
@@ -26,7 +26,7 @@
 - **No Model Switching Overhead**: Models stay loaded
 - **Works with llama-swap**: Already integrated
 
-### Cons ❌
+### Cons
 - **Higher Memory Usage**: Each container has base overhead (~100-200MB per container)
 - **More Containers to Manage**: More services in docker-compose
 - **More Ports**: Each needs a port (or routing via llama-swap)
@@ -120,7 +120,7 @@ ctx-size = 16384
 flash-attn = on
 ```
 
-### Pros ✅
+### Pros
 - **Single Container**: Simpler docker-compose
 - **Dynamic Model Loading**: Load/unload models via API without restart
 - **Automatic Routing**: Router handles model selection
@@ -129,7 +129,7 @@ flash-attn = on
 - **Preset Support**: `.ini` files for model configurations
 - **LRU Unloading**: Automatically unloads least recently used models
 
-### Cons ❌
+### Cons
 - **Shared Resources**: All models share the same GPU/CPU limits
 - **Single Point of Failure**: Router crash affects all models
 - **Model Switching Latency**: Loading a model takes time (first request)
@@ -146,33 +146,33 @@ flash-attn = on
 |---------|----------------|---------------|
 | **Container Count** | 4+ containers | 1 container |
 | **Memory Overhead** | ~400-800MB (base) | ~100-200MB (base) |
-| **Isolation** | ✅ Excellent | ❌ Shared process |
-| **Resource Control** | ✅ Per-model | ❌ Shared |
-| **Model Loading** | ✅ Always loaded | ⚠️ On-demand (latency) |
-| **Dynamic Loading** | ❌ Requires restart | ✅ Via API |
-| **Debugging** | ✅ Separate logs | ⚠️ Combined logs |
-| **Failure Impact** | ✅ Isolated | ❌ Affects all |
-| **Configuration** | ✅ Simple per-service | ⚠️ Complex presets |
-| **Scaling** | ✅ Independent | ❌ Shared |
-| **Port Management** | ⚠️ Manual | ✅ Automatic |
+| **Isolation** | Excellent | Shared process |
+| **Resource Control** | Per-model | Shared |
+| **Model Loading** | Always loaded | On-demand (latency) |
+| **Dynamic Loading** | Requires restart | Via API |
+| **Debugging** | Separate logs | Combined logs |
+| **Failure Impact** | Isolated | Affects all |
+| **Configuration** | Simple per-service | Complex presets |
+| **Scaling** | Independent | Shared |
+| **Port Management** | Manual | Automatic |
 
 ---
 
 ## Recommendation
 
 ### Keep Multi-Container If:
-- ✅ You have 4+ models with different requirements
-- ✅ You need models always loaded (no latency)
-- ✅ You want isolation and reliability
-- ✅ You need per-model resource limits
-- ✅ You're already using llama-swap successfully
+- You have 4+ models with different requirements
+- You need models always loaded (no latency)
+- You want isolation and reliability
+- You need per-model resource limits
+- You're already using llama-swap successfully
 
 ### Use Single Router If:
-- ✅ You have many small, rarely-used models
-- ✅ You want dynamic model loading/unloading
-- ✅ You prefer simpler docker-compose
-- ✅ You're okay with model loading latency
-- ✅ You want built-in model management API
+- You have many small, rarely-used models
+- You want dynamic model loading/unloading
+- You prefer simpler docker-compose
+- You're okay with model loading latency
+- You want built-in model management API
 
 ### Hybrid Approach:
 - Keep critical/hot models in separate containers (always loaded)

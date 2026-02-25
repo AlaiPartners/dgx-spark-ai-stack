@@ -25,14 +25,14 @@ This gives you access to: `granite-vision-3.3-2b-Q8_0.gguf`
 This gives you access to: `Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf`
 
 ### Pros of Direct Connections
-✅ Simpler - no proxy layer  
-✅ Direct access to each server  
-✅ Easier to debug  
-✅ Lower latency (one less hop)
+- Simpler - no proxy layer  
+- Direct access to each server  
+- Easier to debug  
+- Lower latency (one less hop)
 
 ### Cons of Direct Connections
-❌ Need to manually select which connection/model to use  
-❌ Two separate connections to manage
+- Need to manually select which connection/model to use  
+- Two separate connections to manage
 
 ---
 
@@ -52,7 +52,7 @@ Navigate to: `http://localhost:3000` (or `http://localhost/` if using Nginx)
 
 ### 2. Navigate to Connections Settings
 
-1. Click the **⚙️ Settings** icon (top right)
+1. Click the **Settings** icon (top right)
 2. Go to **Admin Settings**
 3. Click **Connections** tab
 4. Select **OpenAI** (or **Compatible** if available)
@@ -63,11 +63,11 @@ Navigate to: `http://localhost:3000` (or `http://localhost/` if using Nginx)
 
 #### Add Vision Model Connection
 
-Click **➕ Add Connection** and configure:
+Click **Add Connection** and configure:
 
 - **Name**: `llama-vision`
 - **URL**: `http://llamacpp-vision:8001/v1`
-  - ⚠️ **Important**: Must include `/v1` at the end!
+  - **Important**: Must include `/v1` at the end!
 - **API Key**: Leave blank
 - **Connection Type**: Select **Standard / Compatible** if tabs are visible
 
@@ -79,7 +79,7 @@ Click **➕ Add Connection** again and configure:
 
 - **Name**: `llama-text`
 - **URL**: `http://llamacpp-llama:8001/v1`
-  - ⚠️ **Important**: Must include `/v1` at the end!
+  - **Important**: Must include `/v1` at the end!
 - **API Key**: Leave blank
 - **Connection Type**: Select **Standard / Compatible** if tabs are visible
 
@@ -95,11 +95,11 @@ After saving, Open WebUI will detect:
 
 ### Option 2: llama-swap Proxy (One Connection)
 
-Click **➕ Add Connection** and configure:
+Click **Add Connection** and configure:
 
 - **Name**: `llama-swap` (or any name you prefer)
 - **URL**: `http://llama-swap:8080/v1`
-  - ⚠️ **Important**: Must include `/v1` at the end!
+  - **Important**: Must include `/v1` at the end!
   - This uses the Docker service name `llama-swap` (internal network)
 - **API Key**: Leave **blank** (not required for local servers)
 - **Connection Type**: Select **Standard / Compatible** if tabs are visible
@@ -201,7 +201,7 @@ If you see timeout errors:
 
 ## Summary
 
-✅ **One connection** in Open WebUI pointing to `http://llama-swap:8080/v1`  
-✅ **Both models** automatically available  
-✅ **Automatic routing** based on model name  
-✅ **No manual switching** needed - llama-swap handles it
+- **One connection** in Open WebUI pointing to `http://llama-swap:8080/v1`  
+- **Both models** automatically available  
+- **Automatic routing** based on model name  
+- **No manual switching** needed - llama-swap handles it

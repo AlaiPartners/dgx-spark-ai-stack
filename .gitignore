@@ -6,6 +6,12 @@ models/
 logs/
 nginx/logs/
 
+# SSL Certificates (keep README.md)
+nginx/ssl/*.pem
+nginx/ssl/*.key
+nginx/ssl/*.crt
+nginx/ssl/*.csr
+
 # Environment
 .env
 
