@@ -156,7 +156,7 @@ services:
     depends_on:
     - open-webui
     - docling
-    - llama-swap
+    #- llama-swap
     restart: unless-stopped
     networks:
     - spark-network

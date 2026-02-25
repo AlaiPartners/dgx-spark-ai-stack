@@ -168,7 +168,9 @@ This project integrates and builds upon the following open-source projects:
 ### 1. Clone and Setup
 
 ```bash
-cd /home/admin/spark-dev-workspace/spark-deploy
+# Clone the repository
+git clone git@github.com:AlaiPartners/spark-deploy.git
+cd spark-deploy
 
 # Copy environment template
 cp .env.example .env
