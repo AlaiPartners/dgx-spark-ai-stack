@@ -1,0 +1,36 @@
+# Models
+models/
+*.gguf
+
+# Logs
+logs/
+nginx/logs/
+
+# Environment
+.env
+
+# Build artifacts
+build/
+*.so
+*.so.*
+llama.cpp/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
