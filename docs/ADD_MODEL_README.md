@@ -197,7 +197,7 @@ The script uses `ruamel.yaml` to preserve YAML formatting. If you manually edit 
 ## Notes
 
 - Models are downloaded to `--models-dir` (default: `./models`)
-- All services use the same `Dockerfile.llamacpp`
+- All services use the pre-built image `cslev/llamacpp-cuda-arm64:latest`
 - Services are added to the `spark-network`
 - GPU access is configured automatically
 - Port 8001 is used internally (no host mapping)
