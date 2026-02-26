@@ -2,9 +2,9 @@
 
 A production-ready Docker Compose deployment for running multiple LLM models on NVIDIA ARM64 hardware (DGX Spark/GB10). This setup provides a complete AI inference stack with document processing, vision capabilities, and automatic model routing.
 
-## 📍 Project Location
+## Project Location
 
-This project is located at: `/home/admin/spark-dev-workspace/spark-deploy`
+Clone this repository to your desired location:
 
 It provides a clean, containerized deployment for:
 - **Open WebUI** - Web interface for interacting with LLMs
@@ -13,53 +13,24 @@ It provides a clean, containerized deployment for:
 - **llama-swap** - Automatic model routing and switching
 - **Nginx** - Reverse proxy and load balancing
 
-## 🏗️ Architecture
+## Architecture
 
 ### System Overview
 
 ```mermaid
-graph TB
-    subgraph "External Access"
-        User[User Browser]
-        API[API Clients]
-    end
-    
-    subgraph "Nginx Reverse Proxy :80"
-        Nginx[Nginx]
-    end
-    
-    subgraph "Application Layer"
-        WebUI[Open WebUI<br/>:3000]
-        Docling[Docling<br/>:5001]
-    end
-    
-    subgraph "Model Routing"
-        Swap[llama-swap<br/>:8080]
-    end
-    
-    subgraph "Inference Servers"
-        Vision[llamacpp-vision<br/>:8001<br/>Granite Vision 3.3-2B]
-        Llama[llamacpp-llama<br/>:8001<br/>Llama 3.1 8B]
-    end
-    
-    subgraph "Storage"
-        Models[(Models Directory)]
-        Logs[(Logs)]
-    end
-    
-    User --> Nginx
-    API --> Nginx
-    Nginx --> WebUI
-    Nginx --> Docling
-    Nginx --> Swap
-    WebUI --> Swap
-    Docling --> Vision
-    Swap --> Vision
-    Swap --> Llama
-    Vision --> Models
+graph LR
+    User[User] --> Nginx[Nginx :443]
+    Nginx --> WebUI[Open WebUI]
+    WebUI --> Vision[llamacpp-vision<br/>Direct]
+    WebUI --> Llama[llamacpp-llama<br/>Direct]
+    WebUI --> Ollama[Built-in Ollama<br/>Direct]
+    WebUI -.-> Swap[llama-swap<br/>Optional]
+    Docling[Docling] --> Vision
+    Swap -.-> Vision
+    Swap -.-> Llama
+    Vision --> Models[Models]
     Llama --> Models
-    Vision --> Logs
-    Llama --> Logs
+    Ollama --> Models
 ```
 
 ### Request Flow
@@ -72,58 +43,30 @@ sequenceDiagram
     participant Swap
     participant Vision
     participant Llama
+
+    User->>Nginx: HTTPS Request
+    Nginx->>WebUI: Web UI
     
-    User->>Nginx: HTTP Request
-    Nginx->>WebUI: / (Web UI)
-    Nginx->>Swap: /llama/* (API)
-    
-    Note over WebUI,Swap: Chat Request
+    Note over WebUI,Swap: Chat Request (via llama-swap)
     WebUI->>Swap: POST /v1/chat/completions<br/>{model: "granite-2b-vision"}
     Swap->>Vision: Route to vision model
     Vision-->>Swap: Response
     Swap-->>WebUI: Stream response
     WebUI-->>User: Display
-    
-    Note over WebUI,Swap: Text Request
-    WebUI->>Swap: POST /v1/chat/completions<br/>{model: "llama-3.1-8b-instruct"}
-    Swap->>Llama: Route to text model
-    Llama-->>Swap: Response
-    Swap-->>WebUI: Stream response
+
+    Note over WebUI,Llama: Chat Request (direct)
+    WebUI->>Llama: POST /v1/chat/completions<br/>{model: "llama-3.1-8b-instruct"}
+    Llama-->>WebUI: Stream response
     WebUI-->>User: Display
     
     Note over Docling,Vision: Document Processing
     Docling->>Vision: POST /v1/chat/completions<br/>(Image description)
     Vision-->>Docling: Description
-    Docling-->>User: Processed document
+    Docling-->>WebUI: Processed document
+    WebUI-->>User: Display
 ```
 
-### Service Dependencies
-
-```mermaid
-graph LR
-    subgraph "Core Services"
-        WebUI[Open WebUI]
-        Docling[Docling]
-        Nginx[Nginx]
-    end
-    
-    subgraph "Model Infrastructure"
-        Swap[llama-swap]
-        Vision[llamacpp-vision]
-        Llama[llamacpp-llama]
-    end
-    
-    WebUI --> Swap
-    WebUI --> Docling
-    Docling --> Vision
-    Swap --> Vision
-    Swap --> Llama
-    Nginx --> WebUI
-    Nginx --> Docling
-    Nginx --> Swap
-```
-
-## 🔗 Used Repositories
+## Used Repositories
 
 This project integrates and builds upon the following open-source projects:
 
@@ -156,7 +99,7 @@ This project integrates and builds upon the following open-source projects:
   - Repository: [cslev/llamacpp-cuda-arm64-docker](https://github.com/cslev/llamacpp-cuda-arm64-docker)
   - Optimized for NVIDIA GB10/DGX Spark hardware
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -182,8 +125,7 @@ nano .env
 ### 2. Deploy
 
 ```bash
-# Option A: Use deploy script (recommended)
-export LLAMA_CPP_PATH=/path/to/llama.cpp  # Optional, if building custom image
+# Use deploy script (recommended)
 ./scripts/deploy.sh
 
 # Option B: Manual deployment
@@ -192,27 +134,34 @@ docker compose up -d
 
 The deploy script will:
 - Download default models if needed
-- Build llama-swap if required
+- Generate SSL certificates if missing
 - Start all services
 
-### 3. Access Services
+### 3. Setup SSL Certificates
 
-- **Open WebUI**: http://localhost:3000 (or http://localhost via Nginx)
+The deploy script will automatically generate self-signed certificates if they don't exist. For production, see `nginx/ssl/README.md` for Let's Encrypt setup.
+
+### 4. Access Services
+
+- **Open WebUI**: https://localhost (via Nginx, redirects HTTP to HTTPS)
+- **Open WebUI Direct**: http://localhost:3000 (internal)
 - **Docling UI**: http://localhost:5001
-- **Nginx**: http://localhost (routes all traffic)
+- **Nginx**: https://localhost (HTTPS) or http://localhost (redirects to HTTPS)
 
-## 📦 Services
+**Note**: For self-signed certificates, browsers will show a security warning. Click "Advanced" → "Proceed to localhost" to continue.
+
+## Services
 
 | Service | Port | Description | Status |
 |---------|------|-------------|--------|
-| **Open WebUI** | 3000 | Web interface for LLM interactions | ✅ Active |
-| **Docling** | 5001 | Document processing with vision | ✅ Active |
-| **llamacpp-vision** | 8001 (internal) | Vision model (Granite 3.3-2B) | ✅ Active |
-| **llamacpp-llama** | 8001 (internal) | Text model (Llama 3.1 8B) | ✅ Active |
-| **llama-swap** | 8080 (internal) | Model routing proxy | ⚠️ Optional |
-| **Nginx** | 80 | Reverse proxy | ✅ Active |
+| **Open WebUI** | 3000 | Web interface for LLM interactions | Active |
+| **Docling** | 5001 | Document processing with vision | Active |
+| **llamacpp-vision** | 8001 (internal) | Vision model (Granite 3.3-2B) | Active |
+| **llamacpp-llama** | 8001 (internal) | Text model (Llama 3.1 8B) | Active |
+| **llama-swap** | 8080 (internal) | Model routing proxy | Optional |
+| **Nginx** | 80, 443 | Reverse proxy (HTTP→HTTPS redirect) | Active |
 
-## 🔧 Configuration
+## Configuration
 
 ### Environment Variables
 
@@ -256,51 +205,84 @@ See [ADD_MODEL_README.md](./docs/ADD_MODEL_README.md) for detailed usage.
 
 ### Open WebUI Configuration
 
-#### Option 1: Direct Connections (Simpler)
+**Important**: When configuring connections in Open WebUI, use Docker service names directly (e.g., `http://llamacpp-vision:8001/v1`), not `localhost` or external URLs, as Open WebUI runs within the Docker network.
 
-Add two connections in Open WebUI settings:
+#### Option 1: Direct Connections (Recommended)
+
+Add connections directly to llama.cpp instances:
 
 1. **Vision Model**:
    - Name: `llama-vision`
    - URL: `http://llamacpp-vision:8001/v1`
    - API Key: (leave blank)
+   - Note: Uses Docker service name `llamacpp-vision`
 
 2. **Text Model**:
    - Name: `llama-text`
    - URL: `http://llamacpp-llama:8001/v1`
    - API Key: (leave blank)
+   - Note: Uses Docker service name `llamacpp-llama`
 
-#### Option 2: llama-swap Proxy (Automatic Routing)
+#### Option 2: llama-swap Proxy (Optional)
 
-Add one connection:
+Add one connection for automatic routing:
 
 - Name: `llama-swap`
 - URL: `http://llama-swap:8080/v1`
 - API Key: (leave blank)
+- Note: Uses Docker service name `llama-swap`
 
 Both models will be automatically available and routed based on the `model` field in requests.
 
+#### Option 3: Built-in Ollama (Optional)
+
+If you are using the `ghcr.io/open-webui/open-webui:ollama` image, it includes a built-in Ollama instance. Connect to it directly:
+
+- Name: `ollama`
+- URL: `http://open-webui:8080/ollama/v1`
+- API Key: (leave blank)
+- Note: This connects to the Ollama instance running within the `open-webui` container itself.
+
+#### Docker Service Names Reference
+
+When configuring connections in Open WebUI, use these Docker service names:
+- `llamacpp-vision:8001` - Vision model service
+- `llamacpp-llama:8001` - Text model service
+- `llama-swap:8080` - Model routing proxy (if enabled)
+- `docling:5001` - Document processing service
+- `open-webui:8080/ollama` - Built-in Ollama instance within Open WebUI
+
 See [OPEN-WEBUI-CONFIG.md](./docs/OPEN-WEBUI-CONFIG.md) for detailed setup instructions.
 
-### Docling Picture Description
+### Docling Document Processing Configuration
 
-Configure in Open WebUI settings:
+To enable document processing and image description in Open WebUI using Docling:
 
-```json
-{
-  "picture_description_api": "{\"url\": \"http://llamacpp-vision:8001/v1/chat/completions\", \"params\": {\"model\": \"granite-2b-vision\", \"max_tokens\": 4096}, \"timeout\": 60, \"prompt\": \"You are analyzing a technical documentation page from an industrial automation system. For each image or diagram on the page, provide a structured description that includes: (1) the type of visual (flowchart, screenshot, annotated UI, diagram, etc.), (2) the key elements visible and their relationships or layout, (3) any text labels, callouts, or annotations present and what they point to, and (4) the functional purpose of the image in context of the surrounding documentation. Be precise and literal — avoid inference beyond what is visually present.\"}"
-}
-```
-
-Or use llama-swap:
+1. Navigate to **Settings** -> **Features** -> **Document Processing**.
+2. Set the **Engine** to `docling`.
+3. Configure the **Docling API Parameters** with the following JSON. **Use Docker service names directly**:
 
 ```json
 {
-  "picture_description_api": "{\"url\": \"http://llama-swap:8080/v1/chat/completions\", \"params\": {\"model\": \"granite-2b-vision\", \"max_tokens\": 4096}, \"timeout\": 60, \"prompt\": \"...\"}"
+  "do_ocr": true,
+  "ocr_engine": "easyocr",
+  "ocr_lang": [
+    "en"
+  ],
+  "pdf_backend": "dlparse_v4",
+  "table_mode": "accurate",
+  "include_images": true,
+  "do_picture_description": true,
+  "picture_description_api": "{\"url\": \"http://llamacpp-vision:8001/v1/chat/completions\", \"params\": {\"model\": \"granite-2b-vision\", \"max_tokens\": 8152}, \"timeout\": 60, \"prompt\": \"Your image description prompt here.\"}"
 }
 ```
 
-## 📊 Model Information
+**Example Picture Description Prompt**:
+```
+You are analyzing a technical documentation page from an industrial automation system. For each image or diagram on the page, provide a structured description that includes: (1) the type of visual (flowchart, screenshot, annotated UI, diagram, etc.), (2) the key elements visible and their relationships or layout, (3) any text labels, callouts, or annotations present and what they point to, and (4) the functional purpose of the image in context of the surrounding documentation. Be precise and literal — avoid inference beyond what is visually present.
+```
+
+## Model Information
 
 ### Currently Configured Models
 
@@ -317,7 +299,7 @@ The `add_model.py` tool supports:
 - **Vision models**: Automatic mmproj detection and configuration
 - **Text models**: Flash attention and optimization flags
 
-## 🔍 Monitoring & Logs
+## Monitoring & Logs
 
 ### View Logs
 
@@ -349,7 +331,7 @@ curl http://llamacpp-vision:8001/health  # (from within network)
 curl http://llama-swap:8080/health
 ```
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### CUDA Issues
 
@@ -387,13 +369,13 @@ sudo lsof -i :80
 - Verify Nginx can reach services: `docker compose exec nginx ping llamacpp-vision`
 - Check Nginx error logs: `tail -f nginx/logs/error.log`
 
-## 📚 Additional Documentation
+## Additional Documentation
 
 - [ADD_MODEL_README.md](./docs/ADD_MODEL_README.md) - Guide to adding new models
 - [OPEN-WEBUI-CONFIG.md](./docs/OPEN-WEBUI-CONFIG.md) - Open WebUI connection setup
 - [ROUTER_MODE_COMPARISON.md](./docs/ROUTER_MODE_COMPARISON.md) - Single router vs multi-container analysis
 
-## 🤝 Contributing
+## Contributing
 
 This is a deployment configuration project. Contributions welcome for:
 - Additional model configurations
@@ -401,7 +383,7 @@ This is a deployment configuration project. Contributions welcome for:
 - Documentation improvements
 - Performance optimizations
 
-## 📄 License
+## License
 
 This project configuration is provided as-is. Individual components maintain their respective licenses:
 - Open WebUI: Apache 2.0
@@ -410,7 +392,7 @@ This project configuration is provided as-is. Individual components maintain the
 - llama-swap: MIT
 - Nginx: 2-clause BSD
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [ggerganov/llama.cpp](https://github.com/ggerganov/llama.cpp) - Core inference engine
 - [cslev/llamacpp-cuda-arm64-docker](https://github.com/cslev/llamacpp-cuda-arm64-docker) - ARM64 CUDA Docker image
