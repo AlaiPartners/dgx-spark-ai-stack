@@ -1,5 +1,6 @@
 #!/bin/bash
-# Simple deployment script
+# Deployment script for Spark Deploy
+# Sets up two llama.cpp instances (vision and text) with SSL-enabled Nginx
 
 set -e
 
@@ -15,87 +16,110 @@ if [ -f ".env" ]; then
     set +a
 fi
 
-# Check for required environment variables
-if [ -z "$LLAMA_CPP_PATH" ]; then
-    echo "Error: LLAMA_CPP_PATH not set"
-    echo "Set it in .env or export it: export LLAMA_CPP_PATH=/path/to/llama.cpp"
-    exit 1
-fi
-
 # Set models directory (use MODELS_DIR from .env or default to ./models)
 MODELS_DIR="${MODELS_DIR:-./models}"
+# Expand $HOME if present
+MODELS_DIR=$(echo "$MODELS_DIR" | sed "s|\$HOME|$HOME|g")
 
-# Create necessary directories (only create logs and nginx/logs, respect existing MODELS_DIR)
-mkdir -p logs nginx/logs
+# Create necessary directories
+mkdir -p logs nginx/logs nginx/ssl
 # Only create MODELS_DIR if it doesn't exist and it's a relative path
 if [[ "$MODELS_DIR" != /* ]] && [ ! -d "$MODELS_DIR" ]; then
     mkdir -p "$MODELS_DIR"
 fi
 
+echo "=== Checking Models ==="
+
 # Check if vision model exists (any quantization)
-if [ ! -f "$MODELS_DIR/granite-vision-3.3-2b/granite-vision-3.3-2b-Q8_0.gguf" ] && \
-   [ ! -f "$MODELS_DIR/granite-vision-3.3-2b/granite-vision-3.3-2b-Q4_K_M.gguf" ] && \
-   [ -z "$(find "$MODELS_DIR/granite-vision-3.3-2b" -name "granite-vision-3.3-2b-*.gguf" 2>/dev/null | head -1)" ]; then
+VISION_MODEL_FOUND=false
+if [ -d "$MODELS_DIR/granite-vision-3.3-2b" ]; then
+    if find "$MODELS_DIR/granite-vision-3.3-2b" -name "granite-vision-3.3-2b-*.gguf" -type f 2>/dev/null | grep -q .; then
+        VISION_MODEL_FOUND=true
+        echo "✓ Vision model found in $MODELS_DIR/granite-vision-3.3-2b/"
+    fi
+fi
+
+if [ "$VISION_MODEL_FOUND" = false ]; then
     echo "Vision model not found. Downloading default (Q4_K_M) to $MODELS_DIR..."
     MODELS_DIR="$MODELS_DIR" ./scripts/download-models.sh granite-vision-3.3-2b Q4_K_M
-else
-    echo "Vision model found in $MODELS_DIR/granite-vision-3.3-2b/"
 fi
+
+# Check if text model exists (llama-3.1-8b-instruct)
+TEXT_MODEL_FOUND=false
+if [ -d "$MODELS_DIR/llama-3.1-8b-instruct" ]; then
+    if find "$MODELS_DIR/llama-3.1-8b-instruct" -name "*.gguf" -type f 2>/dev/null | grep -q .; then
+        TEXT_MODEL_FOUND=true
+        echo "✓ Text model found in $MODELS_DIR/llama-3.1-8b-instruct/"
+    fi
+fi
+
+if [ "$TEXT_MODEL_FOUND" = false ]; then
+    echo "Text model (llama-3.1-8b-instruct) not found."
+    echo "You can download it using: python3 add_model.py"
+    echo "Or manually download to: $MODELS_DIR/llama-3.1-8b-instruct/"
+    read -p "Continue without text model? (y/n) " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        exit 1
+    fi
+fi
+
+echo ""
+echo "=== Setting up SSL Certificates ==="
+
+# Generate self-signed certificate if it doesn't exist
+if [ ! -f "nginx/ssl/cert.pem" ] || [ ! -f "nginx/ssl/key.pem" ]; then
+    echo "Generating self-signed SSL certificate..."
+    
+    if command -v openssl &> /dev/null; then
+        openssl genrsa -out nginx/ssl/key.pem 2048
+        openssl req -new -x509 -key nginx/ssl/key.pem -out nginx/ssl/cert.pem -days 365 \
+            -subj "/C=US/ST=State/L=City/O=SparkDeploy/CN=localhost"
+        chmod 600 nginx/ssl/key.pem
+        chmod 644 nginx/ssl/cert.pem
+        echo "✓ Self-signed certificate generated"
+    else
+        echo "⚠ Warning: openssl not found. SSL certificates not generated."
+        echo "  Please generate certificates manually (see nginx/ssl/README.md)"
+        echo "  Or install openssl and run this script again."
+    fi
+else
+    echo "✓ SSL certificates found in nginx/ssl/"
+fi
+
+echo ""
+echo "=== Creating Docker Volumes ==="
 
 # Create Docker volumes if they don't exist
 docker volume create open-webui 2>/dev/null || true
 docker volume create open-webui-ollama 2>/dev/null || true
+docker volume create docling-models 2>/dev/null || true
+docker volume create docling-easyocr 2>/dev/null || true
 
-# Copy llama.cpp to build context
-echo "Preparing llama.cpp for build..."
-if [ ! -d "$LLAMA_CPP_PATH" ]; then
-    echo "Error: llama.cpp directory not found: $LLAMA_CPP_PATH"
-    exit 1
-fi
+echo "✓ Docker volumes ready"
 
-# Copy llama.cpp to build context
-rm -rf ./llama.cpp
-# Remove trailing slash if present to ensure proper directory copy
-LLAMA_CPP_PATH_CLEAN="${LLAMA_CPP_PATH%/}"
-# Copy directory contents into llama.cpp directory
-mkdir -p ./llama.cpp
-cp -r "$LLAMA_CPP_PATH_CLEAN"/. ./llama.cpp/
+echo ""
+echo "=== Starting Services ==="
 
-# Prepare llama-swap for build
-echo "Preparing llama-swap for build..."
-if [ -n "$LLAMA_SWAP_PATH" ]; then
-    # Use specified llama-swap path
-    if [ ! -d "$LLAMA_SWAP_PATH" ]; then
-        echo "Error: llama-swap directory not found: $LLAMA_SWAP_PATH"
-        exit 1
-    fi
-    echo "Using llama-swap from: $LLAMA_SWAP_PATH"
-    rm -rf ./llama-swap
-    LLAMA_SWAP_PATH_CLEAN="${LLAMA_SWAP_PATH%/}"
-    mkdir -p ./llama-swap
-    cp -r "$LLAMA_SWAP_PATH_CLEAN"/. ./llama-swap/
-else
-    # Clone llama-swap if not present in build context
-    if [ ! -d "./llama-swap" ]; then
-        echo "Cloning llama-swap repository..."
-        git clone https://github.com/mostlygeek/llama-swap.git ./llama-swap
-    else
-        echo "llama-swap directory exists, updating..."
-        cd ./llama-swap && git pull && cd ..
-    fi
-fi
+# Pull latest images and start services
+echo "Pulling latest images..."
+docker compose pull
 
-# Build and start services
-echo "Building and starting services..."
-docker compose build
+echo "Starting services..."
 docker compose up -d
 
-echo "✓ Deployment complete"
+echo ""
+echo "=== Deployment Complete ==="
 echo ""
 echo "Services:"
-echo "  - Open WebUI: http://localhost:3000"
-echo "  - Docling: http://localhost:5001"
-echo "  - llama.cpp: http://localhost:8001"
-echo "  - Nginx: http://localhost"
+echo "  - Open WebUI: https://localhost (or http://localhost:3000 direct)"
+echo "  - Docling UI: http://localhost:5001"
+echo "  - llamacpp-vision: Internal (port 8001) - Granite Vision 3.3-2B"
+echo "  - llamacpp-llama: Internal (port 8001) - Llama 3.1 8B Instruct"
+echo "  - Nginx: https://localhost (HTTP redirects to HTTPS)"
 echo ""
-echo "View logs: docker compose logs -f"
+echo "Note: Self-signed certificates will show a browser warning."
+echo "      Click 'Advanced' → 'Proceed to localhost' to continue."
+echo ""
+echo "View logs: docker compose logs -f [service-name]"
+echo "Check status: docker compose ps"
