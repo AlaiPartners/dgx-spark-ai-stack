@@ -21,6 +21,7 @@ build/
 *.so.*
 llama.cpp/
 llama-swap/
+docling/
 venv/
 
 # Python

@@ -9,6 +9,7 @@ Clone this repository to your desired location:
 It provides a clean, containerized deployment for:
 - **Open WebUI** - Web interface for interacting with LLMs
 - **Docling** - Document processing with vision model integration
+- **content-extraction** - Optional sidecar for fast, manufacturing-optimized document extraction (Word, PDF, spreadsheets) with per-type routing; see `content-extraction/README.md`
 - **llama.cpp** - Multiple model inference servers (vision and text)
 - **llama-swap** - Automatic model routing and switching
 - **Nginx** - Reverse proxy and load balancing
@@ -23,7 +24,7 @@ graph LR
     Nginx --> WebUI[Open WebUI]
     WebUI --> Vision[llamacpp-vision<br/>Direct]
     WebUI --> Llama[llamacpp-llama<br/>Direct]
-    WebUI --> Ollama[Built-in Ollama<br/>Direct]
+    WebUI --> Ollama[Ollama<br/>Standalone]
     WebUI -.-> Swap[llama-swap<br/>Optional]
     Docling[Docling] --> Vision
     Swap -.-> Vision
@@ -73,8 +74,13 @@ This project integrates and builds upon the following open-source projects:
 ### Core Components
 
 - **[Open WebUI](https://github.com/open-webui/open-webui)** - Extensible, feature-rich, and user-friendly self-hosted WebUI
-  - Image: `ghcr.io/open-webui/open-webui:ollama`
+  - Image: `ghcr.io/open-webui/open-webui:main`
+  - Connects to standalone Ollama via `OLLAMA_BASE_URL=http://ollama:11434`
   - License: Apache 2.0
+
+- **[Ollama](https://github.com/ollama/ollama)** - Run LLMs locally (standalone container; models in `open-webui-ollama` volume)
+  - Image: `ollama/ollama:latest`
+  - License: MIT
 
 - **[Docling](https://github.com/DS4SD/docling)** - Document processing framework with vision model integration
   - Image: `ghcr.io/docling-project/docling-serve-cu130:main`
@@ -143,9 +149,9 @@ The deploy script will automatically generate self-signed certificates if they d
 
 ### 4. Access Services
 
-- **Open WebUI**: https://localhost (via Nginx, redirects HTTP to HTTPS)
-- **Open WebUI Direct**: http://localhost:3000 (internal)
+- **Open WebUI**: https://localhost (via Nginx only; no direct port — Open WebUI runs with 2 replicas behind Nginx)
 - **Docling UI**: http://localhost:5001
+- **Ollama**: http://localhost:11434 (model API; warmup container preloads `gpt-oss-20b` after startup)
 - **Nginx**: https://localhost (HTTPS) or http://localhost (redirects to HTTPS)
 
 **Note**: For self-signed certificates, browsers will show a security warning. Click "Advanced" → "Proceed to localhost" to continue.
@@ -154,8 +160,9 @@ The deploy script will automatically generate self-signed certificates if they d
 
 | Service | Port | Description | Status |
 |---------|------|-------------|--------|
-| **Open WebUI** | 3000 | Web interface for LLM interactions | Active |
-| **Docling** | 5001 | Document processing with vision | Active |
+| **Open WebUI** | via Nginx | Web interface (2 replicas, load-balanced behind Nginx) | Active |
+| **Ollama** | 11434 | Standalone LLM server; warmup preloads `gpt-oss-20b` | Active |
+| **Docling** | 5001 | Document processing with vision (memory capped 16GB) | Active |
 | **llamacpp-vision** | 8001 (internal) | Vision model (Granite 3.3-2B) | Active |
 | **llamacpp-llama** | 8001 (internal) | Text model (Llama 3.1 8B) | Active |
 | **llama-swap** | 8080 (internal) | Model routing proxy | Optional |
@@ -234,23 +241,24 @@ Add one connection for automatic routing:
 
 Both models will be automatically available and routed based on the `model` field in requests.
 
-#### Option 3: Built-in Ollama (Optional)
+#### Option 3: Standalone Ollama
 
-If you are using the `ghcr.io/open-webui/open-webui:ollama` image, it includes a built-in Ollama instance. Connect to it directly:
+Ollama runs in its own container. In Open WebUI, add the connection:
 
 - Name: `ollama`
-- URL: `http://open-webui:8080/ollama/v1`
+- URL: `http://ollama:11434`
 - API Key: (leave blank)
-- Note: This connects to the Ollama instance running within the `open-webui` container itself.
+
+Models are stored in the `open-webui-ollama` volume (preserved from the previous open-webui:ollama setup). From the host you can run `ollama pull <model>` (port 11434 is published).
 
 #### Docker Service Names Reference
 
 When configuring connections in Open WebUI, use these Docker service names:
+- `ollama:11434` - Standalone Ollama (models, local LLMs)
 - `llamacpp-vision:8001` - Vision model service
 - `llamacpp-llama:8001` - Text model service
 - `llama-swap:8080` - Model routing proxy (if enabled)
 - `docling:5001` - Document processing service
-- `open-webui:8080/ollama` - Built-in Ollama instance within Open WebUI
 
 See [OPEN-WEBUI-CONFIG.md](./docs/OPEN-WEBUI-CONFIG.md) for detailed setup instructions.
 
@@ -357,10 +365,10 @@ If ports are already in use:
 
 ```bash
 # Check what's using the port
-sudo lsof -i :3000
 sudo lsof -i :80
+sudo lsof -i :11434
 
-# Modify ports in docker-compose.yml if needed
+# Modify ports in the relevant compose fragment if needed
 ```
 
 ### Nginx 502 Errors
@@ -371,6 +379,8 @@ sudo lsof -i :80
 
 ## Additional Documentation
 
+- [compose/README.md](./compose/README.md) - Compose layout, domains, and external volumes
+- [content-extraction/README.md](./content-extraction/README.md) - Manufacturing-optimized document extraction and Open WebUI setup
 - [ADD_MODEL_README.md](./docs/ADD_MODEL_README.md) - Guide to adding new models
 - [OPEN-WEBUI-CONFIG.md](./docs/OPEN-WEBUI-CONFIG.md) - Open WebUI connection setup
 - [ROUTER_MODE_COMPARISON.md](./docs/ROUTER_MODE_COMPARISON.md) - Single router vs multi-container analysis

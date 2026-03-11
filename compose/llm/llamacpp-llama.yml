@@ -1,0 +1,37 @@
+services:
+  llamacpp-llama:
+    image: spark-deploy/llamacpp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.llamacpp
+    container_name: llamacpp-llama
+    restart: unless-stopped
+    volumes:
+      - ${MODELS_DIR:-../../models}:/models:ro
+      - ../../logs:/logs
+    environment:
+      - MODEL_PATH=${LLAMA_MODEL_PATH:-/models/llama-3.1-8b-instruct/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf}
+      - CUDA_VISIBLE_DEVICES=0
+    command: >
+      --host 0.0.0.0
+      --port 8001
+      --ctx-size 16384
+      --threads 8
+      --flash-attn on
+      --n-gpu-layers 99
+      --model ${LLAMA_MODEL_PATH:-/models/llama-3.1-8b-instruct/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf}
+    networks:
+      - spark-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s

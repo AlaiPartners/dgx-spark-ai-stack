@@ -1,0 +1,41 @@
+services:
+  docling:
+    image: ghcr.io/docling-project/docling-serve-cu130:main
+    container_name: docling
+    restart: unless-stopped
+    # Docling has known memory leaks (e.g. docling-project/docling#2209, docling-serve#474).
+    # Cap memory so the container is OOM-killed if it grows past the limit; it will then show
+    # unhealthy (or restart). Use a cron to periodically restart the container as a workaround.
+    ports:
+      - "5001:5001"
+    volumes:
+      - docling-models:/root/.cache/docling
+      - docling-easyocr:/root/.EasyOCR
+    environment:
+      - DOCLING_SERVE_ENABLE_UI=true
+      - DOCLING_SERVE_ENABLE_REMOTE_SERVICES=true
+      - DOCLING_SERVE_MAX_SYNC_WAIT=3600
+      - DOCLING_SERVE_ENG_LOC_NUM_WORKERS=2
+      - OMP_NUM_THREADS=4
+      - MKL_NUM_THREADS=4
+      - UVICORN_WORKERS=1
+      - CUDA_VISIBLE_DEVICES=0
+    networks:
+      - spark-network
+    deploy:
+      resources:
+        limits:
+          memory: 16g
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    depends_on:
+      - llamacpp-vision
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

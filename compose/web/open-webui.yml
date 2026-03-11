@@ -1,0 +1,36 @@
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    # No container_name so replicas get unique names (open-webui-1, open-webui-2, ...).
+    # No ports: use nginx (80/443) to reach Open WebUI; it proxies to open-webui:8080 and Compose load-balances.
+    # All replicas share open-webui volume; for 2+ replicas consider an external DB (PostgreSQL) to avoid SQLite/Chroma locking.
+    volumes:
+      - open-webui:/app/backend/data
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - DOCLING_DO_PICTURE_DESCRIPTION=true
+      - RAG_ALLOWED_FILE_EXTENSIONS=pdf,txt,md,docx,png,jpg,jpeg,gif,webp
+      - RAG_SYSTEM_CONTEXT=True
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - spark-network
+    deploy:
+      replicas: 3
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      - ollama
+      - docling
+      - llamacpp-llama
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s

@@ -1,0 +1,14 @@
+# Shared network and volumes. Include this first so all services can reference them.
+#
+# If your production volumes are created externally (e.g. by another stack or
+# docker volume create), set external: true for each volume below and ensure
+# they exist before `docker compose up`. Otherwise Compose creates them.
+networks:
+  spark-network:
+    driver: bridge
+
+volumes:
+  open-webui:
+  open-webui-ollama:
+  docling-models:
+  docling-easyocr:

@@ -1,0 +1,11 @@
+# Wrapper around cslev/llamacpp-cuda-arm64 that adds curl for Docker healthchecks.
+# The base image only has llama-server and no way to probe /health; cron restarts
+# rely on the container reporting unhealthy when the server is down.
+FROM cslev/llamacpp-cuda-arm64:latest
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Server still listens on port set by command (e.g. 8001); EXPOSE in base is 8033.

@@ -132,7 +132,7 @@ python add_model.py meta-llama/Meta-Llama-3.1-8B-Instruct-GGUF \
 3. **Downloads model** from HuggingFace (and mmproj if vision model)
 4. **Detects model type** (vision vs text) by checking for mmproj
 5. **Generates service name** from repo ID (or uses `--name`)
-6. **Adds service** to `docker-compose.yml` with proper configuration
+6. **Adds service** to the compose setup: if the root file uses `include` (split layout), creates a new fragment under `compose/<service_name>.yml` and appends it to the `include` list; otherwise appends the service to the single `docker-compose.yml`.
 7. **Updates llama-swap** config (unless `--no-swap`)
 8. **Starts service** (unless `--no-start`)
 9. **Shows connection details** for the new model

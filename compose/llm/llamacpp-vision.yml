@@ -1,0 +1,39 @@
+services:
+  llamacpp-vision:
+    image: spark-deploy/llamacpp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.llamacpp
+    container_name: llamacpp-vision
+    restart: unless-stopped
+    volumes:
+      - ${MODELS_DIR:-../../models}:/models:ro
+      - ../../logs:/logs
+    environment:
+      - MODEL_PATH=${VISION_MODEL_PATH:-/models/granite-vision-3.3-2b/granite-vision-3.3-2b-Q8_0.gguf}
+      - MM_PROJ_PATH=${VISION_MM_PROJ_PATH:-/models/granite-vision-3.3-2b/mmproj-model-f16.gguf}
+      - CUDA_VISIBLE_DEVICES=0
+    command: >
+      --host 0.0.0.0
+      --port 8001
+      --ctx-size 32768
+      --threads 8
+      --n-gpu-layers 99
+      --flash-attn on
+      --model ${VISION_MODEL_PATH:-/models/granite-vision-3.3-2b/granite-vision-3.3-2b-Q8_0.gguf}
+      --mmproj ${VISION_MM_PROJ_PATH:-/models/granite-vision-3.3-2b/mmproj-model-f16.gguf}
+    networks:
+      - spark-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s

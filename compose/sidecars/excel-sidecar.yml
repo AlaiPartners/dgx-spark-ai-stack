@@ -1,0 +1,19 @@
+services:
+  excel-sidecar:
+    build:
+      context: ../../excel-sidecar
+      dockerfile: Dockerfile
+    container_name: excel-sidecar
+    restart: unless-stopped
+    volumes:
+      - open-webui:/app/backend/data
+    environment:
+      - UPLOADS_DIR=/app/backend/data/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    networks:
+      - spark-network

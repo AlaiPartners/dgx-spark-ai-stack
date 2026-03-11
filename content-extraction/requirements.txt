@@ -1,0 +1,8 @@
+# content-extraction service deps; Python 3.11+
+# Check with: pip index versions <pkg>
+fastapi==0.135.1
+uvicorn[standard]==0.41.0
+httpx==0.28.1
+pymupdf==1.27.2
+markitdown[docx]==0.1.5
+requests==2.32.5
