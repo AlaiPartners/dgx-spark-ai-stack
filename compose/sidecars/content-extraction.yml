@@ -1,0 +1,22 @@
+services:
+  content-extraction:
+    build:
+      context: ../../content-extraction
+      dockerfile: Dockerfile
+    container_name: content-extraction
+    restart: unless-stopped
+    environment:
+      - DOCLING_URL=http://docling:5001
+      - PDF_TEXT_THRESHOLD=50
+      - DOCLING_PICTURE_DESCRIPTION=true
+      - VISION_URL=http://llamacpp-vision:8001/v1/chat/completions
+      - VISION_MODEL=granite-vision-3.3-2b
+      - VISION_MAX_TOKENS=8152
+      - VISION_TIMEOUT=300
+    networks:
+      - spark-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

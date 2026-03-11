@@ -544,25 +544,29 @@ def get_next_port(compose_data: dict) -> int:
 
 def add_service_to_compose(compose_path: str, service_name: str, container_name: str,
                            model_path: str, mmproj_path: Optional[str], models_dir: str):
-    """Add new service to docker-compose.yml."""
+    """Add new service: with split compose (include), write a fragment and add to include list; else append to single file."""
+    compose_dir = Path(compose_path).resolve().parent
+    compose_dir.mkdir(parents=True, exist_ok=True)
+    fragments_dir = compose_dir / "compose"
+
     with open(compose_path, 'r') as f:
         compose = yaml.load(f)
-    
+
     # Expand tilde and resolve models_dir
     models_dir_expanded = Path(models_dir).expanduser().resolve()
-    
+
     # Convert model path to relative path in container
     model_path_resolved = Path(model_path).resolve()
     model_rel = str(model_path_resolved.relative_to(models_dir_expanded))
     model_env = f"/models/{model_rel}"
-    
+
     mmproj_env = None
     if mmproj_path:
         mmproj_path_resolved = Path(mmproj_path).resolve()
         mmproj_rel = str(mmproj_path_resolved.relative_to(models_dir_expanded))
         mmproj_env = f"/models/{mmproj_rel}"
-    
-    # Create service config using pre-built image
+
+    # Build service config (same as before)
     service_config = {
         'image': 'cslev/llamacpp-cuda-arm64:latest',
         'container_name': container_name,
@@ -587,8 +591,7 @@ def add_service_to_compose(compose_path: str, service_name: str, container_name:
             }
         }
     }
-    
-    # Build command as list (ruamel.yaml will format it as YAML multiline)
+
     ctx_size = '32768' if mmproj_env else '16384'
     command_parts = [
         '--host', '0.0.0.0',
@@ -599,19 +602,35 @@ def add_service_to_compose(compose_path: str, service_name: str, container_name:
         '--model', model_env,
         '--flash-attn', 'on'
     ]
-    
-    # Add mmproj for vision models
     if mmproj_env:
         command_parts.extend(['--mmproj', mmproj_env])
-    
     service_config['command'] = command_parts
-    
-    compose['services'][service_name] = service_config
-    
-    with open(compose_path, 'w') as f:
-        yaml.dump(compose, f)
-    
-    console.print(f"[green][OK][/green] Added service '[cyan]{service_name}[/cyan]' to docker-compose.yml")
+
+    include_list = compose.get('include')
+    if include_list is not None and isinstance(include_list, list):
+        # Split compose: write new fragment in compose/llm/ and append to include list
+        llm_dir = fragments_dir / "llm"
+        llm_dir.mkdir(parents=True, exist_ok=True)
+        fragment_filename = f"{service_name}.yml"
+        fragment_path = llm_dir / fragment_filename
+        fragment_data = {'services': {service_name: service_config}}
+        with open(fragment_path, 'w') as f:
+            yaml.dump(fragment_data, f)
+        # Include path relative to root compose file (e.g. compose/llm/llamacpp-foo.yml)
+        include_entry = f"compose/llm/{fragment_filename}"
+        if include_entry not in include_list:
+            include_list.append(include_entry)
+        with open(compose_path, 'w') as f:
+            yaml.dump(compose, f)
+        console.print(f"[green][OK][/green] Added service '[cyan]{service_name}[/cyan]' in [cyan]{fragment_path}[/cyan] and updated include in docker-compose.yml")
+    else:
+        # Single-file compose: add service to root document
+        if 'services' not in compose:
+            compose['services'] = {}
+        compose['services'][service_name] = service_config
+        with open(compose_path, 'w') as f:
+            yaml.dump(compose, f)
+        console.print(f"[green][OK][/green] Added service '[cyan]{service_name}[/cyan]' to docker-compose.yml")
 
 
 def update_llama_swap(swap_config_path: str, model_id: str, service_name: str):

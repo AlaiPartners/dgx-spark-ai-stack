@@ -1,0 +1,43 @@
+services:
+  llamacpp-qwen:
+    image: spark-deploy/llamacpp:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.llamacpp
+    container_name: llamacpp-qwen
+    restart: unless-stopped
+    volumes:
+      - ${MODELS_DIR:-../../models}:/models:ro
+      - ../../logs:/logs
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+    networks:
+      - spark-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8001"
+      - --ctx-size
+      - "16384"
+      - --threads
+      - "8"
+      - --n-gpu-layers
+      - "99"
+      - --model
+      - /models/Qwen3-14B-Claude-4.5-Opus-Distill.iq4_nl.gguf
+      - --flash-attn
+      - on

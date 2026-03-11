@@ -1,0 +1,48 @@
+# Dedicated Ollama service. Uses the same volume (open-webui-ollama) that was
+# previously mounted in the open-webui:ollama container, so existing models
+# are preserved. Open WebUI connects via OLLAMA_BASE_URL=http://ollama:11434.
+#
+# ollama-warmup: runs once after Ollama is healthy and sends a dummy request
+# to preload the daily-driver model (gpt-oss-20b) with keep_alive: -1 so it
+# stays resident until displaced or container restart. Best-effort: if the
+# model is not pulled yet (fresh install), the request fails and we exit 0
+# so the container does not show as failed.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - open-webui-ollama:/root/.ollama
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - spark-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  ollama-warmup:
+    image: curlimages/curl:latest
+    container_name: ollama-warmup
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ./ollama-warmup.sh:/warmup.sh:ro
+    entrypoint: ["/bin/sh", "/warmup.sh"]
+    networks:
+      - spark-network
